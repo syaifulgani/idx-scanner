@@ -9,8 +9,8 @@ print("🚀 SCRIPT STARTED")
 # ========================
 # TELEGRAM CONFIG
 # ========================
-BOT_TOKEN = "8584785617:AAHMnITJ8og_H9g0VlqfFAOweVR_aGYAOxM"
-CHAT_ID = "1872530070"
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
