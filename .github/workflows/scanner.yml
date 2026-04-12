@@ -1,8 +1,5 @@
 name: IDX Scanner
 
-env:
-  TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
 on:
   schedule:
@@ -13,6 +10,11 @@ jobs:
   run-scanner:
     runs-on: ubuntu-latest
 
+    env:
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+    
     steps:
     - name: Checkout repo
       uses: actions/checkout@v3
