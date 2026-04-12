@@ -12,14 +12,12 @@ print("🚀 SCRIPT STARTED")
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-print("TOKEN:", BOT_TOKEN)
-print("CHAT_ID:", CHAT_ID)
-
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
-        "text": message
+        "text": message,
+        "parse_mode": "Markdown"
     }
     requests.post(url, data=payload)
 
@@ -29,15 +27,14 @@ def send_telegram(message):
 with open("idx_tickers.txt") as f:
     tickers = [line.strip() for line in f.readlines()]
 
+print(f"Loaded {len(tickers)} tickers")
+
 # ========================
-# RSI FUNCTION
+# CONFIG STRATEGY 1
 # ========================
-def compute_rsi(series, period=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+TOP_N = 3
+STOP_LOSS_PCT = 0.07
+TAKE_PROFIT_PCT = 0.15
 
 # ========================
 # SCANNER
@@ -48,152 +45,100 @@ for ticker in tickers:
     print(f"Scanning {ticker}...")
 
     try:
-        data = yf.download(ticker, period="6mo", progress=False)
+        data = yf.download(ticker, period="1y", progress=False)
 
-        if data.empty or len(data) < 50:
+        if data.empty or len(data) < 200:
             continue
 
-        # 🔥 FIX MULTI-INDEX
+        # Fix column issue
         data.columns = data.columns.get_level_values(0)
 
         # ========================
-        # INDICATORS
+        # INDICATORS (STRATEGY 1)
         # ========================
-        data['RSI'] = compute_rsi(data['Close'])
+        data['RET_60'] = data['Close'].pct_change(60)
+        data['MA200'] = data['Close'].rolling(200).mean()
         data['VOL20'] = data['Volume'].rolling(20).mean()
-        data['MA20'] = data['Close'].rolling(20).mean()
 
-        # ========================
-        # GET VALUES
-        # ========================
         latest = data.iloc[-1]
-        prev = data.iloc[-2]
 
-        # Skip if NaN
-        if pd.isna(latest['RSI']) or pd.isna(latest['VOL20']) or pd.isna(latest['MA20']):
-            continue
-
-        # Convert to float
-        rsi = float(latest['RSI'])
-        close = float(latest['Close'])
-        prev_close = float(prev['Close'])
+        momentum = float(latest['RET_60'])
+        price = float(latest['Close'])
+        ma200 = float(latest['MA200'])
         volume = float(latest['Volume'])
         vol_avg = float(latest['VOL20'])
-        ma20 = float(latest['MA20'])
+
+        if pd.isna(momentum) or pd.isna(ma200) or pd.isna(vol_avg):
+            continue
 
         # ========================
-        # BREAK OF STRUCTURE (BOS)
+        # STRATEGY 1 FILTER
         # ========================
-        recent_high = float(data['High'].rolling(10).max().iloc[-2])
-        bos_up = close > recent_high
+        if price < ma200:
+            continue
+
+        if momentum < 0:
+            continue
+
+        if volume < vol_avg:
+            continue
 
         # ========================
-        # TRADINGVIEW MATCH LOGIC
-        # ========================
-        score = 0
-
-        # RSI oversold
-        if rsi < 30:
-            score += 2
-
-        # Price reversal
-        if close > prev_close:
-            score += 1
-
-        # Volume spike
-        if volume > 1.5 * vol_avg:
-            score += 2
-
-        # BOS confirmation
-        if bos_up:
-            score += 3
-
-        # Trend filter (downtrend)
-        if close < ma20:
-            score += 1
-
-
-         # ========================
         # ENTRY / SL / TP
         # ========================
-        recent_low = float(data['Low'].rolling(5).min().iloc[-1])
+        entry = price
+        sl = entry * (1 - STOP_LOSS_PCT)
+        tp = entry * (1 + TAKE_PROFIT_PCT)
 
-        entry = close
-        sl = recent_low
-        risk = entry - sl
+        rr = (tp - entry) / (entry - sl)
 
-        if risk <= 0:
-            continue
-
-        # ========================
-        # RISK FILTER (ADD HERE 🔥)
-        # ========================
-
-        risk_pct = risk / entry
-
-        if risk_pct > 0.08:   # 8% max risk
-            continue
-
-        # TP1 (50% exit)
-        tp1 = entry + (1 * risk)
-
-        # Trailing stop (MA20)
-        trail_sl = ma20
-        if trail_sl < entry:
-            trail_sl = entry
-
-
-        # ========================
-        # FINAL FILTER
-        # ========================
-        if score >= 5:
-            results.append({
-                "Ticker": ticker,
-                "Entry": round(entry, 2),
-                "SL": round(sl, 2),
-                "TP1": round(tp1, 2),
-                "Trail_SL": round(trail_sl, 2),
-                "RSI": round(rsi, 2),
-                "Score": score
-            })
+        results.append({
+            "Ticker": ticker,
+            "Entry": round(entry, 2),
+            "SL": round(sl, 2),
+            "TP": round(tp, 2),
+            "Momentum": round(momentum, 4),
+            "RR": round(rr, 2)
+        })
 
     except Exception as e:
         print(f"Error {ticker}: {e}")
 
-
 # ========================
-# OUTPUT
+# RANKING (IMPORTANT)
 # ========================
 df = pd.DataFrame(results)
 
 today = datetime.now().strftime("%Y-%m-%d")
 
 if not df.empty:
-    df = df.sort_values("Score", ascending=False)
+    df = df.sort_values("Momentum", ascending=False).head(TOP_N)
 
-    print("\n🔥 TOP REVERSAL SETUPS:")
+    print("\n🔥 TOP MOMENTUM SETUPS:")
     print(df)
 
     # Save Excel
-    df.to_excel("reversal_tv_match.xlsx", index=False)
+    df.to_excel("strategy1_signals.xlsx", index=False)
 
-    # Telegram message
-    msg = f"📅 {today}\n🔥 REVERSAL + TREND SETUP\n\n"
+    # ========================
+    # TELEGRAM MESSAGE
+    # ========================
+    msg = f"🔥 {today} - STRATEGY 1 SIGNAL\n\n"
 
     for _, row in df.iterrows():
         msg += (
-            f"{row['Ticker']}\n"
-            f"Entry: {row['Entry']}\n"
-            f"SL: {row['SL']}\n"
-            f"TP1 (50%): {row['TP1']}\n"
-            f"Trail SL: {row['Trail_SL']}\n"
-            f"Score: {row['Score']}\n\n"
+            f"*{row['Ticker']}*\n"
+            f"Entry : {row['Entry']}\n"
+            f"SL    : {row['SL']} (-7%)\n"
+            f"TP    : {row['TP']} (+15%)\n"
+            f"RR    : {row['RR']}\n"
+            f"Mom   : {row['Momentum']:.2%}\n\n"
         )
 
     send_telegram(msg)
 
 else:
-    msg = f"📅 {today}\n❌ No strong TradingView match signals today"
+    msg = f"📅 {today}\n❌ No Strategy 1 signal"
     print(msg)
     send_telegram(msg)
 
