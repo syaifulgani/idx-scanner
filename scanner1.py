@@ -1,6 +1,6 @@
 import yfinance as yf
 import pandas as pd
-import requests   
+import requests
 import os
 from datetime import datetime
 
@@ -30,11 +30,12 @@ with open("idx_tickers.txt") as f:
 print(f"Loaded {len(tickers)} tickers")
 
 # ========================
-# CONFIG STRATEGY 1
+# CONFIG (BEST STRATEGY)
 # ========================
 TOP_N = 3
 STOP_LOSS_PCT = 0.07
-TAKE_PROFIT_PCT = 0.15
+TAKE_PROFIT_PCT = 0.18   # UPDATED
+MOM_THRESHOLD = 0.05     # UPDATED
 
 # ========================
 # SCANNER
@@ -50,11 +51,10 @@ for ticker in tickers:
         if data.empty or len(data) < 200:
             continue
 
-        # Fix column issue
         data.columns = data.columns.get_level_values(0)
 
         # ========================
-        # INDICATORS (STRATEGY 1)
+        # INDICATORS
         # ========================
         data['RET_60'] = data['Close'].pct_change(60)
         data['MA200'] = data['Close'].rolling(200).mean()
@@ -72,12 +72,12 @@ for ticker in tickers:
             continue
 
         # ========================
-        # STRATEGY 1 FILTER
+        # BEST STRATEGY FILTER
         # ========================
         if price < ma200:
             continue
 
-        if momentum < 0:
+        if momentum < MOM_THRESHOLD:
             continue
 
         if volume < vol_avg:
@@ -97,7 +97,7 @@ for ticker in tickers:
             "Entry": round(entry, 2),
             "SL": round(sl, 2),
             "TP": round(tp, 2),
-            "Momentum": round(momentum, 4),
+            "Momentum": momentum,
             "RR": round(rr, 2)
         })
 
@@ -105,7 +105,7 @@ for ticker in tickers:
         print(f"Error {ticker}: {e}")
 
 # ========================
-# RANKING (IMPORTANT)
+# RANKING
 # ========================
 df = pd.DataFrame(results)
 
@@ -117,28 +117,30 @@ if not df.empty:
     print("\n🔥 TOP MOMENTUM SETUPS:")
     print(df)
 
-    # Save Excel
     df.to_excel("strategy1_signals.xlsx", index=False)
 
     # ========================
-    # TELEGRAM MESSAGE
+    # TELEGRAM MESSAGE (IMPROVED)
     # ========================
-    msg = f"🔥 {today} - STRATEGY 1 SIGNAL\n\n"
+    msg = f"🔥 {today} - MOMENTUM SIGNAL (BEST STRATEGY)\n\n"
 
     for _, row in df.iterrows():
         msg += (
             f"*{row['Ticker']}*\n"
             f"Entry : {row['Entry']}\n"
             f"SL    : {row['SL']} (-7%)\n"
-            f"TP    : {row['TP']} (+15%)\n"
+            f"TP    : {row['TP']} (+18%)\n"
             f"RR    : {row['RR']}\n"
-            f"Mom   : {row['Momentum']:.2%}\n\n"
+            f"Mom   : {row['Momentum']:.2%}\n"
+            f"➡️ Manage:\n"
+            f"   • BE @ +8%\n"
+            f"   • Trail @ +15%\n\n"
         )
 
     send_telegram(msg)
 
 else:
-    msg = f"📅 {today}\n❌ No Strategy 1 signal"
+    msg = f"📅 {today}\n❌ No valid momentum setup (strict filter)"
     print(msg)
     send_telegram(msg)
 
