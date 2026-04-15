@@ -30,4 +30,4 @@ jobs:
 
     - name: Run scanner
       run: |
-        python scanner1.py
+        python scanner2.py
