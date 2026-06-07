@@ -46,3 +46,4 @@ BNII.JK
 INDY.JK
 DEWA.JK
 MBAP.JK
+# ini list sahamnya
