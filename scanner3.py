@@ -7,7 +7,7 @@ from datetime import datetime
 # TELEGRAM
 # =====================================
 
-BOT_TOKEN = "8584785617:AAGiJIASXhu2xEYIylYy9SikCEDUaMa9FzI"
+BOT_TOKEN = "TELEGRAM_TOKEN"
 CHAT_ID = "1872530070"
 
 def send_telegram(msg):
