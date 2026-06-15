@@ -8,7 +8,7 @@ from datetime import datetime
 # =====================================
 
 BOT_TOKEN = "TELEGRAM_TOKEN"
-CHAT_ID = "1872530070"
+CHAT_ID = "TELEGRAM_CHAT_ID"
 
 def send_telegram(msg):
 
